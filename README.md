@@ -33,8 +33,7 @@ means editing it in every service individually rather than in one place,
 and there's no `/actuator/refresh` to push config changes without a
 restart. A centralized, Git-backed Spring Cloud Config Server is a planned
 future enhancement (see `docs/Project_Report.docx` §14.4 "Config Server
-(Centralized Configuration Management)" and `docs/Project_Plan_ECommerce_Microservices.docx`
-§2.2 "Out of Scope (Future Work)").
+(Centralized Configuration Management)").
 
 ## Architecture at a glance
 
@@ -228,5 +227,5 @@ ecommerce-order-management/
 A centralized Config Server, Kubernetes, a full observability stack
 (distributed tracing / log aggregation / metrics dashboards), and an MCP
 (Model Context Protocol) server were deliberately scoped out of this
-iteration to fit the project timeline - see the project plan's "Out of
-Scope" section and the report's "Future Work" section.
+iteration to fit the project timeline - see the report's "Future Work"
+section.
