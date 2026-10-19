@@ -1,0 +1,1042 @@
+{
+  "info": {
+    "_postman_id": "b579f2dc-602a-4471-816a-fd61e87e6a93",
+    "name": "Distributed E-Commerce Order Management System",
+    "description": "API collection for the MS Computer Science capstone project - Product, Order, Inventory, and Notification services, fronted by the Spring Cloud Gateway and secured with Keycloak OAuth2/OIDC.\n\n## Before you start\n1. Bring the stack up: `docker compose up --build` (or the local-dev flow in README.md).\n2. Add `127.0.0.1  keycloak` to your hosts file (see README.md \"One-time setup\") - required for Keycloak's issued-token issuer claim to match what the gateway validates against.\n3. Run folder '1. Infrastructure Health' to confirm everything is up.\n4. Run both requests in folder '2. Auth (Keycloak)' to populate {{adminToken}} / {{customerToken}}.\n5. Run folder '3. Product Service', then '4. Inventory Service' (to seed stock for {{sku}}), then '5. Order Service', then '6. Notification Service' - roughly the order the README's own \"Trying the API end-to-end\" walkthrough follows.\n\nAll tokens and IDs captured along the way (adminToken, customerToken, productId, orderNumber) are stored as collection variables by each request's Tests script, so requests later in the collection don't need any manual copy-pasting between them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://keycloak:8180",
+      "type": "string"
+    },
+    {
+      "key": "eurekaUrl",
+      "value": "http://localhost:8761",
+      "type": "string"
+    },
+    {
+      "key": "realm",
+      "value": "ecommerce",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "ecommerce-client",
+      "type": "string"
+    },
+    {
+      "key": "adminUsername",
+      "value": "demo-admin",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "AdminPass123!",
+      "type": "string"
+    },
+    {
+      "key": "customerUsername",
+      "value": "demo-customer",
+      "type": "string"
+    },
+    {
+      "key": "customerPassword",
+      "value": "CustomerPass123!",
+      "type": "string"
+    },
+    {
+      "key": "eurekaUsername",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "eurekaPassword",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sku",
+      "value": "SKU-100",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "customer-1",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderNumber",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Infrastructure Health",
+      "description": "Sanity checks that the stack is up before exercising the business APIs. Run these first if anything below returns connection errors.",
+      "item": [
+        {
+          "name": "Discovery Server (Eureka) Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{eurekaUrl}}",
+              "host": [
+                "{{eurekaUrl}}"
+              ],
+              "path": []
+            },
+            "description": "HTML dashboard - open in a browser rather than Postman's preview for a readable view. Confirms which services are currently registered and UP. Protected with HTTP Basic auth (admin/admin by default).",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{eurekaUsername}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{eurekaPassword}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "API Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/actuator/health",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Confirms the gateway itself is up and can reach Eureka."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Auth (Keycloak)",
+      "description": "Run 'Get Admin Token' and 'Get Customer Token' once at the start of a session - each captures its access_token into the {{adminToken}} / {{customerToken}} collection variables, which every other request in this collection references via Bearer auth. Tokens are short-lived (Keycloak default: 5 minutes); re-run the relevant request here if you start getting 401s partway through a session.\n\nUses the public 'ecommerce-client' with the OAuth2 Resource Owner Password Credentials grant, which is fine for local/demo testing against the seeded demo-admin / demo-customer users but is not a pattern to carry into a production client.",
+      "item": [
+        {
+          "name": "Get Admin Token (demo-admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "description": "demo-admin holds both ADMIN and CUSTOMER realm roles, so this token works for every endpoint in the collection.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{adminUsername}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.access_token) {",
+                  "    pm.collectionVariables.set('adminToken', body.access_token);",
+                  "    console.log('adminToken captured, expires in ' + body.expires_in + 's');",
+                  "} else {",
+                  "    console.warn('No access_token in response - check the username/password/client_id collection variables.');",
+                  "}",
+                  "pm.test('Token request succeeded', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.access_token).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Customer Token (demo-customer)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "description": "demo-customer holds only the CUSTOMER realm role - use this token to confirm customer-permitted endpoints (orders, notifications) work and admin-only endpoints (product/inventory writes) correctly return 403.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{customerUsername}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{customerPassword}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.access_token) {",
+                  "    pm.collectionVariables.set('customerToken', body.access_token);",
+                  "    console.log('customerToken captured, expires in ' + body.expires_in + 's');",
+                  "} else {",
+                  "    console.warn('No access_token in response - check the username/password/client_id collection variables.');",
+                  "}",
+                  "pm.test('Token request succeeded', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(body.access_token).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Product Service",
+      "description": "Product catalog CRUD, routed through the API Gateway at /api/products/**. GET is public (no token required); POST/PUT/DELETE require the ADMIN realm role.",
+      "item": [
+        {
+          "name": "Create Product [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Creates a catalog entry. Captures the returned 'id' into {{productId}} for the two requests below. Returns 409 if the SKU already exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sku\": \"{{sku}}\",\n    \"name\": \"Wireless Mouse\",\n    \"description\": \"2.4GHz wireless mouse\",\n    \"category\": \"Electronics\",\n    \"price\": 19.99,\n    \"initialStockHint\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('productId', body.id);",
+                  "    console.log('productId captured: ' + body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Product by Id [public]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "No Authorization header needed - GET /api/products/** is permitAll at the gateway."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product by SKU [public]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products/sku/{{sku}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "sku",
+                "{{sku}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Products (paginated) [public]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products?page=0&size=20",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product [ADMIN]",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sku\": \"{{sku}}\",\n    \"name\": \"Wireless Mouse (Updated)\",\n    \"description\": \"2.4GHz wireless mouse - updated description\",\n    \"category\": \"Electronics\",\n    \"price\": 17.99,\n    \"initialStockHint\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product [ADMIN]",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products/{{productId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "description": "Run this last, after the Inventory/Order requests below that reference {{sku}}, since it only removes the catalog entry (Inventory Service's stock record is independent - database-per-service).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product - Validation Error (400) [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Deliberately invalid payload (blank sku/name, negative price) - expect 400 Bad Request with a RFC 7807 ProblemDetail body listing each field violation.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sku\": \"\",\n    \"name\": \"\",\n    \"category\": \"Electronics\",\n    \"price\": -5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product - Forbidden (403) [CUSTOMER]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/products",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "A CUSTOMER-role token calling an ADMIN-only route - expect 403 Forbidden from the gateway's role check, proving the authorization rules in SecurityConfig are actually enforced.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sku\": \"SKU-999\",\n    \"name\": \"Should Be Rejected\",\n    \"category\": \"Electronics\",\n    \"price\": 9.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Inventory Service",
+      "description": "Stock tracking, routed through the API Gateway at /api/inventory/** - all admin-only. Note: the reserve/release calls here hit the same endpoints Order Service calls internally via its RestClient-backed HTTP interface client when you place an order (Folder 5) - those internal calls bypass the gateway entirely and carry no JWT (see SecurityConfig's comment on this). Use these requests to seed stock and to poke the reservation logic directly.",
+      "item": [
+        {
+          "name": "Create Stock Record [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/inventory",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory"
+              ]
+            },
+            "description": "Seeds stock for {{sku}}. Returns 409 if a stock record for this SKU already exists - use 'Set Available Quantity' instead to top it up.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sku\": \"{{sku}}\",\n    \"availableQuantity\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Stock by SKU [ADMIN]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/inventory/{{sku}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{sku}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reserve Stock [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/inventory/{{sku}}/reserve",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{sku}}",
+                "reserve"
+              ]
+            },
+            "description": "Moves quantity from available to reserved. Returns 409 Conflict if availableQuantity is less than the requested quantity - this is the exact response Order Service's InventoryGateway interprets as an insufficient-stock business rejection (not a circuit-breaker trip).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Release Stock [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/inventory/{{sku}}/release",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{sku}}",
+                "release"
+              ]
+            },
+            "description": "The compensating action for Reserve - moves quantity back from reserved to available. Order Service calls this automatically when a multi-item order fails partway through.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set Available Quantity (replenish) [ADMIN]",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/inventory/{{sku}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{sku}}"
+              ]
+            },
+            "description": "Overwrites availableQuantity directly - use this to top up stock between test runs instead of deleting/recreating the stock record.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"quantity\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reserve Stock - Insufficient Stock (409) [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/inventory/{{sku}}/reserve",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory",
+                "{{sku}}",
+                "reserve"
+              ]
+            },
+            "description": "Requests far more than is available - expect 409 Conflict. Run 'Place Order' with a large quantity afterwards to see this same rejection surface as an order with status FAILED (Section 6.2/12.2 of the project report).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"quantity\": 999999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Order Service",
+      "description": "Order placement and retrieval, routed through /api/orders/** - requires a CUSTOMER or ADMIN token. Run '4. Inventory Service > Create Stock Record' first so {{sku}} has stock to reserve.",
+      "item": [
+        {
+          "name": "Place Order (happy path) [CUSTOMER]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/orders",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Reserves stock synchronously via a RestClient-backed HTTP interface client + the Resilience4J circuit breaker, persists the order, and - only if every item reserved successfully - publishes an OrderPlacedEvent to Kafka. Captures {{orderNumber}} for the request below. Still returns 201 even when the order ends up FAILED (see the next request) - the HTTP status reflects that an order record was created, the status field carries the actual outcome.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerId\": \"{{customerId}}\",\n    \"items\": [\n        {\n            \"sku\": \"{{sku}}\",\n            \"quantity\": 2,\n            \"unitPrice\": 19.99\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('orderNumber', body.orderNumber);",
+                  "    console.log('orderNumber captured: ' + body.orderNumber + ' (status: ' + body.status + ')');",
+                  "    pm.test('Order was created (status field carries the business outcome)', function () {",
+                  "        pm.expect(['CONFIRMED', 'FAILED']).to.include(body.status);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Place Order - Insufficient Stock (still 201, status FAILED) [CUSTOMER]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/orders",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Requests far more than is in stock. Expect HTTP 201 with the response body's status = FAILED and failureReason explaining the shortfall (see report Section 12.2).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerId\": \"{{customerId}}\",\n    \"items\": [\n        {\n            \"sku\": \"{{sku}}\",\n            \"quantity\": 999999,\n            \"unitPrice\": 19.99\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('orderNumber', body.orderNumber);",
+                  "    console.log('orderNumber captured: ' + body.orderNumber + ' (status: ' + body.status + ')');",
+                  "    pm.test('Order was created (status field carries the business outcome)', function () {",
+                  "        pm.expect(['CONFIRMED', 'FAILED']).to.include(body.status);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Order by Order Number [CUSTOMER]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/orders/{{orderNumber}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderNumber}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Orders for Customer [CUSTOMER]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/orders?customerId={{customerId}}",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Place Order - Unauthenticated (401) [no token]",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/orders",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "No Authorization header at all - expect 401 Unauthorized. /api/orders/** requires at least CUSTOMER.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerId\": \"{{customerId}}\",\n    \"items\": [\n        {\n            \"sku\": \"{{sku}}\",\n            \"quantity\": 1,\n            \"unitPrice\": 19.99\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Notification Service",
+      "description": "Read-only view of notifications the service has consumed from Kafka, routed through /api/notifications/**. Run this after 'Place Order' - the Kafka event is consumed asynchronously, so allow a second or two before checking.",
+      "item": [
+        {
+          "name": "List Recent Notifications [CUSTOMER]",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/notifications",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ]
+            },
+            "description": "In-memory, most-recent-first, capped at 100 entries per service instance (Section 9.2 of the project report). Only orders that ended up CONFIRMED publish an event, so a FAILED order from Folder 5 will not appear here.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

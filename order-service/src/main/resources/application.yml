@@ -1,0 +1,107 @@
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:mysql://localhost:3306/order_db}
+    username: ${ORDER_DB_USERNAME:order_user}
+    password: ${ORDER_DB_PASSWORD:order_pass}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+    topic:
+      order-placed: order-placed-events
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/ecommerce}
+
+server:
+  port: 8082
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+
+# Logical Eureka service id for the Inventory Service, resolved to a real
+# instance URI at call time by Spring Cloud LoadBalancer - see
+# InventoryClientConfig. Connect/read timeouts for this call (3s each) are
+# set there too, on the underlying RestClient request factory.
+inventory-service:
+  url: ${INVENTORY_SERVICE_URL:http://inventory-service}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      inventoryService:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        # A rejected order due to insufficient stock is a normal business
+        # outcome, not an infrastructure fault - it must not trip the
+        # breaker or be retried.
+        ignore-exceptions:
+          - com.tenacious.ecommerce.order.exception.InsufficientStockException
+  retry:
+    instances:
+      inventoryService:
+        max-attempts: 3
+        wait-duration: 500ms
+        ignore-exceptions:
+          - com.tenacious.ecommerce.order.exception.InsufficientStockException
+
+# --- Common settings ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    com.tenacious.ecommerce: DEBUG

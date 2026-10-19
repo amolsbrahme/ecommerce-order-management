@@ -1,0 +1,51 @@
+{
+  "realm": "ecommerce",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 1800,
+  "roles": {
+    "realm": [
+      { "name": "ADMIN", "description": "Full administrative access (product catalog, inventory management)" },
+      { "name": "CUSTOMER", "description": "Can place and view their own orders" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ecommerce-client",
+      "name": "E-Commerce Order Management Client",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:8080/*", "http://localhost:8081/*"],
+      "webOrigins": ["*"]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo-admin",
+      "enabled": true,
+      "email": "demo-admin@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "credentials": [
+        { "type": "password", "value": "AdminPass123!", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN", "CUSTOMER"]
+    },
+    {
+      "username": "demo-customer",
+      "enabled": true,
+      "email": "demo-customer@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Customer",
+      "credentials": [
+        { "type": "password", "value": "CustomerPass123!", "temporary": false }
+      ],
+      "realmRoles": ["CUSTOMER"]
+    }
+  ]
+}

@@ -1,0 +1,241 @@
+name: ecommerce-order-management
+
+services:
+
+  # ---------------------------------------------------------------------
+  # Infrastructure: databases, messaging, identity
+  # ---------------------------------------------------------------------
+
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql-order:
+    image: mysql:8.3
+    container_name: mysql-order
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: order_db
+      MYSQL_USER: order_user
+      MYSQL_PASSWORD: order_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-order-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  mysql-inventory:
+    image: mysql:8.3
+    container_name: mysql-inventory
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: inventory_db
+      MYSQL_USER: inventory_user
+      MYSQL_PASSWORD: inventory_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-inventory-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # Single-node Kafka in KRaft mode (no separate Zookeeper container needed).
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # NOTE: "keycloak" must resolve to 127.0.0.1 from your HOST machine too
+  # (not just inside the Docker network), otherwise the access-token
+  # `iss` (issuer) claim Keycloak stamps into every token won't match
+  # what the API Gateway expects when validating tokens issued to a
+  # Postman/browser client running on the host. Add this line to your
+  # hosts file once:
+  #   127.0.0.1  keycloak
+  # (Windows: C:\Windows\System32\drivers\etc\hosts, run editor as
+  # Administrator. macOS/Linux: /etc/hosts, via sudo.)
+  # See README.md "Keycloak hostname setup" for details - this exact
+  # gotcha is also called out in the project report's challenges section.
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8180
+      KC_HOSTNAME: keycloak
+      KC_HOSTNAME_PORT: 8180
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./docker/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep 'UP' <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------
+  # Platform / infrastructure services
+  # ---------------------------------------------------------------------
+  #
+  # NOTE: every service below carries its own configuration locally
+  # (src/main/resources/application.yml); the environment variables
+  # override DB/Kafka/Keycloak values, read directly by each service.
+  # A centralized Config Server is a planned future enhancement.
+
+  discovery-server:
+    build:
+      context: .
+      dockerfile: discovery-server/Dockerfile
+    container_name: discovery-server
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://admin:admin@localhost:8761/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_URI: http://admin:admin@discovery-server:8761/eureka/
+      KEYCLOAK_ISSUER_URI: http://keycloak:8180/realms/ecommerce
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------
+  # Business services
+  # ---------------------------------------------------------------------
+
+  product-service:
+    build:
+      context: .
+      dockerfile: product-service/Dockerfile
+    container_name: product-service
+    ports:
+      - "8081:8081"
+    environment:
+      EUREKA_URI: http://admin:admin@discovery-server:8761/eureka/
+      MONGODB_URI: mongodb://mongodb:27017/product-db
+      KEYCLOAK_ISSUER_URI: http://keycloak:8180/realms/ecommerce
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: inventory-service/Dockerfile
+    container_name: inventory-service
+    ports:
+      - "8083:8083"
+    environment:
+      EUREKA_URI: http://admin:admin@discovery-server:8761/eureka/
+      INVENTORY_DB_URL: jdbc:mysql://mysql-inventory:3306/inventory_db
+      INVENTORY_DB_USERNAME: inventory_user
+      INVENTORY_DB_PASSWORD: inventory_pass
+      KEYCLOAK_ISSUER_URI: http://keycloak:8180/realms/ecommerce
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      mysql-inventory:
+        condition: service_healthy
+
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    container_name: order-service
+    ports:
+      - "8082:8082"
+    environment:
+      EUREKA_URI: http://admin:admin@discovery-server:8761/eureka/
+      ORDER_DB_URL: jdbc:mysql://mysql-order:3306/order_db
+      ORDER_DB_USERNAME: order_user
+      ORDER_DB_PASSWORD: order_pass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KEYCLOAK_ISSUER_URI: http://keycloak:8180/realms/ecommerce
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      mysql-order:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      inventory-service:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification-service
+    ports:
+      - "8084:8084"
+    environment:
+      EUREKA_URI: http://admin:admin@discovery-server:8761/eureka/
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KEYCLOAK_ISSUER_URI: http://keycloak:8180/realms/ecommerce
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+volumes:
+  mongodb-data:
+  mysql-order-data:
+  mysql-inventory-data:

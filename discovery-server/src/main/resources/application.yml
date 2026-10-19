@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: discovery-server
+  security:
+    user:
+      name: ${EUREKA_DASHBOARD_USER:admin}
+      password: ${EUREKA_DASHBOARD_PASSWORD:admin}
+
+server:
+  port: 8761
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    # The registry itself does not need to register with, or fetch a
+    # registry from, itself.
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+
+# --- Common settings ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    com.tenacious.ecommerce: DEBUG

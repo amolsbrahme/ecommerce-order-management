@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.tenacious.ecommerce</groupId>
+    <artifactId>ecommerce-order-management</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>Distributed E-Commerce Order Management System</name>
+    <description>
+        Master of Science in Computer Science capstone project - a Spring Boot
+        microservices architecture demonstrating service decomposition, service
+        discovery, API gateway routing, OAuth2/OIDC security, event-driven
+        messaging, and resilience patterns.
+
+        Every service carries its own configuration locally in its own
+        src/main/resources/application.yml, with environment-specific values
+        (DB URLs, Keycloak issuer, Kafka brokers, etc.) overridden via Docker
+        Compose environment blocks. A centralized Spring Cloud Config Server
+        is a planned future enhancement (see docs/Project_Report.docx).
+    </description>
+
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.parameters>true</maven.compiler.parameters>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring-boot.version>3.3.4</spring-boot.version>
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <springdoc.version>2.6.0</springdoc.version>
+        <jacoco.version>0.8.15</jacoco.version>
+    </properties>
+
+    <modules>
+        <module>discovery-server</module>
+        <module>api-gateway</module>
+        <module>product-service</module>
+        <module>order-service</module>
+        <module>inventory-service</module>
+        <module>notification-service</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                    <executions>
+                        <execution>
+                            <id>repackage</id>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <!--
+            JaCoCo is declared here (not in pluginManagement) so every child
+            module inherits it automatically with no per-module pom changes.
+            "prepare-agent" instruments each module's tests at `mvn test` time;
+            "report" renders the HTML/XML coverage report for that module
+            straight after its tests finish, at target/site/jacoco/index.html.
+            No coverage threshold is enforced (no "check" execution) since this
+            project's baseline coverage hasn't been measured on a machine with
+            working Maven Central access yet - see the project report's Testing
+            section for how to add an enforced minimum once it has been.
+        -->
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>jacoco-prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>jacoco-report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
